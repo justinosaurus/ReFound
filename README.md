@@ -6,8 +6,8 @@ ReFound is a starter lost-and-found web app built with React, Express, and MySQL
 
 ```text
 ReFound/
-├── backend/     Express API and MySQL connection
-└── frontend/    React app built with Vite
+├── server/     Express API and MySQL connection
+└── client/     React app built with Vite
 ```
 
 ## Requirements
@@ -17,18 +17,18 @@ ReFound/
 
 ## Setup
 
-1. In `backend/`, copy `.env.example` to `.env` and set your MySQL connection values and desired port.
-2. In `frontend/`, copy `.env.example` to `.env` if the API is not at the default `http://localhost:5000/api`.
+1. In `server/`, copy `.env.example` to `.env` and set your MySQL connection values and desired port.
+2. In `client/`, copy `.env.example` to `.env` if the API is not at the default `http://localhost:5000/api`.
 3. Install dependencies and run each app in its own terminal:
 
 ```bash
-cd backend
+cd server
 npm install
 npm run dev
 ```
 
 ```bash
-cd frontend
+cd client
 npm install
 npm run dev
 ```
@@ -47,8 +47,8 @@ The response includes `status: "ok"` and a timestamp. This endpoint confirms tha
 
 ## MySQL configuration
 
-Create the database named in `DB_NAME` before connecting database-backed routes. The connection pool in `backend/src/config/db.js` reads `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, and `DB_NAME` from the backend environment. Never commit your `.env` files; `.env.example` contains safe placeholders.
+Create the database named in `DB_NAME` before connecting database-backed routes. The connection pool in `server/src/config/db.js` reads `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, and `DB_NAME` from the server environment. Never commit your `.env` files; `.env.example` contains safe placeholders.
 
 ## Frontend API URL
 
-The frontend reads `VITE_API_URL` from its environment. Its default is `http://localhost:5000/api`. Set another URL in `frontend/.env` when the API runs elsewhere, then restart the Vite server. The home page uses this setting to check the API health endpoint.
+The client reads `VITE_API_URL` from its environment. Its default is `http://localhost:5000/api`. Set another URL in `client/.env` when the API runs elsewhere, then restart the Vite server. The home page uses this setting to check the API health endpoint.
