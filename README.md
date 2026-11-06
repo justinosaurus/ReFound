@@ -1,54 +1,68 @@
 # ReFound
 
-ReFound is a starter lost-and-found web app built with React, Express, and MySQL. This first version includes a welcoming home page, placeholder browsing and reporting pages, and a small API health check. Matching, claims, and item storage are not implemented yet.
-
-## Project structure
-
-```text
-ReFound/
-├── server/     Express API and MySQL connection
-└── client/     React app built with Vite
-```
+ReFound is a mobile-first lost-and-found app built with React, Express, and MySQL. Users can post lost or found items, browse and search open reports, view possible matches, and send private claims to reporters.
 
 ## Requirements
 
 - Node.js 18 or newer and npm
-- MySQL 8 (needed when you add database-backed features; the health check works without it)
+- MySQL 8
 
 ## Setup
 
-1. In `server/`, copy `.env.example` to `.env` and set your MySQL connection values and desired port.
-2. In `client/`, copy `.env.example` to `.env` if the API is not at the default `http://localhost:5000/api`.
-3. Install dependencies and run each app in its own terminal:
+1. Copy `server/.env.example` to `server/.env` and configure the MySQL connection.
+2. Copy `client/.env.example` to `client/.env` if the API is not at `http://localhost:5000/api`.
+3. Create the database once. Replace `refound` and `root` if your server environment uses different values:
 
-```bash
+```powershell
+mysql -u root -p -e "CREATE DATABASE IF NOT EXISTS refound CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;"
+```
+
+The server creates the required tables from `server/src/db/schema.sql` before it starts. The configured database user needs permission to create tables.
+
+4. Install dependencies and run each app in its own terminal:
+
+```powershell
 cd server
 npm install
 npm run dev
 ```
 
-```bash
+```powershell
 cd client
 npm install
 npm run dev
 ```
 
-Vite prints the local frontend address, usually `http://localhost:5173`. The Express API runs at `http://localhost:5000` by default.
+Vite prints the frontend address, usually `http://localhost:5173`. The API runs at `http://localhost:5000`.
 
-## Check the API
+## Features
 
-Open `http://localhost:5000/api/health` or run:
+- Create lost or found reports with private contact details.
+- Browse and search open items by type and keywords.
+- View up to five possible opposite-type matches based on category, location, and description.
+- Send a private claim with contact details and identifying information.
+- Manage reports, review claims, contact claimants, and mark reports open or resolved.
 
-```bash
-curl http://localhost:5000/api/health
+There are no user accounts or email delivery. A random management key is created when a report is submitted and saved in that browser. Keep that browser's storage to manage the report. If browser storage is unavailable, the key is shown once; save it privately. Reporter and claimant contact details are not public. Reporters review claims and contact claimants themselves.
+
+## API
+
+- `GET /api/health` — API process health; does not test MySQL.
+- `GET /api/items` — list open items; optional `type=lost|found`, `q=search`, and `category`.
+- `POST /api/items` — create a report; returns the public item and one-time management key.
+- `GET /api/items/:id/matches` — return possible opposite-type matches.
+- `POST /api/items/:id/claims` — submit a claim for an open report.
+- `GET /api/manage/:id` — get a managed item and its claims; requires `X-Management-Token`.
+- `PATCH /api/manage/:id/status` — set report status to `open` or `resolved`.
+- `PATCH /api/manage/:id/claims/:claimId` — accept or decline a pending claim.
+
+The client uses `VITE_API_URL`, defaulting to `http://localhost:5000/api`. The server reads `PORT`, `FRONTEND_URL`, and `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME` from `server/.env`. Never commit `.env` files.
+
+## Verify
+
+```powershell
+cd server
+npm test
+cd ..\client
+npm run build
 ```
-
-The response includes `status: "ok"` and a timestamp. This endpoint confirms that Express is running; it does not test the MySQL connection.
-
-## MySQL configuration
-
-Create the database named in `DB_NAME` before connecting database-backed routes. The connection pool in `server/src/config/db.js` reads `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, and `DB_NAME` from the server environment. Never commit your `.env` files; `.env.example` contains safe placeholders.
-
-## Frontend API URL
-
-The client reads `VITE_API_URL` from its environment. Its default is `http://localhost:5000/api`. Set another URL in `client/.env` when the API runs elsewhere, then restart the Vite server. The home page uses this setting to check the API health endpoint.
