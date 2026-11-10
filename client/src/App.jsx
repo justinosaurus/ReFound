@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link, NavLink, Route, Routes } from "react-router-dom";
+import { Link, NavLink, Route, Routes, useSearchParams } from "react-router-dom";
 
 import "./features.css";
 
@@ -47,7 +47,7 @@ function Header() {
           <NavLink to="/report">Report</NavLink>
           <NavLink to="/manage">My reports</NavLink>
         </nav>
-        <Link className="nav-cta" to="/report">Report an item <ArrowIcon /></Link>
+        <Link className="nav-cta" to="/report?type=lost">Report an item <ArrowIcon /></Link>
       </div>
     </header>
   );
@@ -66,34 +66,56 @@ function ApiStatus() {
 }
 
 function HomePage() {
+  const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [claimingItem, setClaimingItem] = useState(null);
+
+  useEffect(() => {
+    let active = true;
+    apiRequest("/items")
+      .then(({ items: recentItems }) => active && setItems(recentItems.slice(0, 6)))
+      .catch((requestError) => active && setError(requestError.message))
+      .finally(() => active && setLoading(false));
+    return () => { active = false; };
+  }, []);
+
   return (
     <main className="home-page page-width">
-      <section className="home-heading">
-        <span className="eyebrow">LOST AND FOUND</span>
-        <h1>Lost or found<br />an item?</h1>
-        <p>Search current reports or post an item to the community board.</p>
-      </section>
       <section className="home-actions" aria-label="Get started">
-        <Link className="action-card" to="/browse">
-          <span className="action-card-icon" aria-hidden="true">⌕</span>
-          <span className="action-card-copy"><b>Browse reports</b><span>Search lost and found items</span></span>
-          <ArrowIcon />
+        <Link className="home-report-button" to="/report?type=lost">
+          <span className="home-report-icon" aria-hidden="true">−</span>
+          <span>Report lost item</span>
         </Link>
-        <Link className="action-card action-card-primary" to="/report">
-          <span className="action-card-icon" aria-hidden="true">＋</span>
-          <span className="action-card-copy"><b>Report an item</b><span>Post a lost or found item</span></span>
-          <ArrowIcon />
-        </Link>
-        <Link className="action-card" to="/manage">
-          <span className="action-card-icon" aria-hidden="true">▤</span>
-          <span className="action-card-copy"><b>Manage reports</b><span>Review claims for your reports</span></span>
-          <ArrowIcon />
+        <Link className="home-report-button found" to="/report?type=found">
+          <span className="home-report-icon" aria-hidden="true">＋</span>
+          <span>Report found item</span>
         </Link>
       </section>
-      <section className="home-status-card">
-        <div><b>How it works</b><p>Browse reports, submit a claim with identifying details, or post an item and review responses.</p></div>
-        <ApiStatus />
+
+      <section className="home-feed" aria-labelledby="feed-title">
+        <div className="feed-heading">
+          <div>
+            <span className="eyebrow">Community board</span>
+            <h1 id="feed-title">Recent reports</h1>
+          </div>
+          <Link className="feed-view-all" to="/browse">View all <ArrowIcon /></Link>
+        </div>
+        {loading ? <p className="feed-state">Loading recent reports…</p> : null}
+        <ErrorMessage>{error}</ErrorMessage>
+        {!loading && !error && !items.length ? (
+          <div className="feed-empty">
+            <span className="feed-empty-icon" aria-hidden="true">⌕</span>
+            <b>No reports yet</b>
+            <span>New lost and found reports will appear here.</span>
+            <ApiStatus />
+          </div>
+        ) : null}
+        <div className="home-feed-list">
+          {items.map((item) => <ItemCard key={item.id} item={item} onClaim={setClaimingItem} />)}
+        </div>
       </section>
+      {claimingItem ? <ClaimForm item={claimingItem} onClose={() => setClaimingItem(null)} /> : null}
     </main>
   );
 }
@@ -263,6 +285,8 @@ function MatchResults({ matches, error }) {
 }
 
 function ReportPage() {
+  const [searchParams] = useSearchParams();
+  const [type, setType] = useState(() => searchParams.get("type") === "found" ? "found" : "lost");
   const [error, setError] = useState("");
   const [created, setCreated] = useState(null);
   const [backupToken, setBackupToken] = useState("");
@@ -284,7 +308,7 @@ function ReportPage() {
       const { item, managementToken } = await apiRequest("/items", {
         method: "POST",
         body: JSON.stringify({
-          type: form.get("type"),
+          type,
           title: form.get("title"),
           description: form.get("description"),
           category: form.get("category"),
@@ -323,11 +347,29 @@ function ReportPage() {
       </PageIntro>
       <form className="feature-form report-form" onSubmit={submitReport}>
         <div className="form-grid">
-          <label>Report type
-            <select name="type" required defaultValue="lost">
-              <option value="lost">I lost an item</option><option value="found">I found an item</option>
-            </select>
-          </label>
+          <fieldset className="form-wide report-type-picker">
+            <legend>What are you reporting?</legend>
+            <div className="report-type-buttons">
+              <button
+                className={`report-type-button${type === "lost" ? " selected" : ""}`}
+                type="button"
+                aria-pressed={type === "lost"}
+                onClick={() => setType("lost")}
+              >
+                <span aria-hidden="true">−</span>
+                I lost an item
+              </button>
+              <button
+                className={`report-type-button${type === "found" ? " selected" : ""}`}
+                type="button"
+                aria-pressed={type === "found"}
+                onClick={() => setType("found")}
+              >
+                <span aria-hidden="true">＋</span>
+                I found an item
+              </button>
+            </div>
+          </fieldset>
           <label>Category
             <select name="category" required defaultValue="">
               <option value="" disabled>Choose a category</option>
