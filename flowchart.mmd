@@ -1,0 +1,31 @@
+
+```mermaid
+flowchart TD
+    A[Finder submits found-item details] --> B[Listing published: With finder, not yet received by staff]
+    B --> C[Staff contacts finder to arrange handoff]
+    B --> D{Claim submitted?}
+    D -- No --> E[Listing remains visible]
+    E --> D
+    D -- Yes --> F[Claim held pending staff verification]
+    F --> G[Staff coordinates item handoff]
+    C --> G
+    G --> H{Item handed to staff?}
+    H -- No --> I[Keep listing marked: With finder]
+    I --> G
+    H -- Yes --> J[Staff records receipt and storage location]
+    J --> K[Staff verifies item against report]
+    K --> L{Does it match the report?}
+    L -- No --> M[Staff investigates or updates the report]
+    M --> K
+    L -- Yes --> N[Update listing: Verified and held at desk]
+    N --> O{Pending claim?}
+    O -- No --> P[Keep item securely stored]
+    P --> O
+    O -- Yes --> Q[Staff reviews claim and verifies claimant]
+    Q --> R{Claim approved?}
+    R -- No --> S[Decline claim; keep listing open]
+    S --> O
+    R -- Yes --> T[Arrange pickup at the desk]
+    T --> U[Staff records handoff]
+    U --> V[Mark item returned and close listing]
+```

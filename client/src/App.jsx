@@ -1,11 +1,21 @@
 import { useEffect, useState } from "react";
-import { Link, NavLink, Route, Routes, useSearchParams } from "react-router-dom";
+import { Link, NavLink, Route, Routes, useNavigate, useSearchParams } from "react-router-dom";
 
 import "./features.css";
 
 const apiUrl = (import.meta.env.VITE_API_URL || "http://localhost:5000/api").replace(/\/$/, "");
 const managedItemsKey = "refound-managed-items";
+const staffTokenKey = "refound-staff-token";
 const categories = ["Accessories", "Bags", "Clothing", "Electronics", "Keys", "Other"];
+const itemStatusLabels = {
+  lost_reported: "Lost report",
+  with_finder: "With finder",
+  received_by_staff: "Received by staff",
+  verified: "Verified",
+  awaiting_claim_review: "Awaiting claim review",
+  approved_for_pickup: "Approved for pickup",
+  resolved: "Resolved",
+};
 
 function todayDate() {
   const date = new Date();
@@ -138,6 +148,23 @@ function SuccessMessage({ children }) {
   return children ? <p className="form-message success-message" role="status">{children}</p> : null;
 }
 
+function SuccessToast({ message, onClose }) {
+  useEffect(() => {
+    if (!message) return undefined;
+    const timeout = window.setTimeout(() => onClose(""), 6000);
+    return () => window.clearTimeout(timeout);
+  }, [message, onClose]);
+
+  if (!message) return null;
+  return (
+    <div className="success-toast" role="status" aria-live="polite">
+      <span className="success-toast-icon" aria-hidden="true">✓</span>
+      <span>{message}</span>
+      <button className="success-toast-close" type="button" onClick={() => onClose("")} aria-label="Dismiss notification">×</button>
+    </div>
+  );
+}
+
 function ItemCard({ item, onClaim }) {
   return (
     <article className="item-card">
@@ -145,15 +172,20 @@ function ItemCard({ item, onClaim }) {
         <span className={`item-type ${item.type}`}>{item.type}</span>
         <span className="item-category">{item.category}</span>
       </div>
+      <span className={`status-badge ${item.status}`}>{itemStatusLabels[item.status] || item.status}</span>
       <h2>{item.title}</h2>
       <p className="item-description">{item.description}</p>
       <div className="item-meta">
         <span>⌖ {item.location}</span>
         <span>{new Date(item.event_date).toLocaleDateString()}</span>
       </div>
-      <button className="button button-dark item-action" type="button" onClick={() => onClaim(item)}>
-        {item.type === "found" ? "This could be mine" : "I may have found this"}
-      </button>
+      {item.type === "found" ? (
+        <button className="button button-dark item-action" type="button" disabled={item.status === "approved_for_pickup"} onClick={() => onClaim(item)}>
+          {item.status === "approved_for_pickup" ? "Pickup already approved" : "This could be mine"}
+        </button>
+      ) : (
+        <Link className="button button-dark item-action" to="/report?type=found">I found this item</Link>
+      )}
     </article>
   );
 }
@@ -161,6 +193,7 @@ function ItemCard({ item, onClaim }) {
 function ClaimForm({ item, onClose }) {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const [toastMessage, setToastMessage] = useState("");
   const [saving, setSaving] = useState(false);
 
   async function submitClaim(event) {
@@ -179,7 +212,8 @@ function ClaimForm({ item, onClose }) {
           message: form.get("message"),
         }),
       });
-      setSuccess("Your claim was sent privately to the reporter.");
+      setSuccess("Your claim was sent privately to campus staff for review.");
+      setToastMessage("Your claim was recorded successfully.");
       formElement.reset();
     } catch (requestError) {
       setError(requestError.message);
@@ -189,18 +223,21 @@ function ClaimForm({ item, onClose }) {
   }
 
   return (
-    <form className="claim-form" onSubmit={submitClaim}>
-      <div className="form-section-heading">
-        <div><b>Send a claim for {item.title}</b><span>Your email is shared only with the reporter.</span></div>
-        <button className="icon-button" type="button" onClick={onClose} aria-label="Close claim form">×</button>
-      </div>
-      <label>Your name<input name="claimantName" required maxLength="100" /></label>
-      <label>Email address<input name="claimantEmail" type="email" required maxLength="254" /></label>
-      <label>How can you identify this item?<textarea name="message" rows="3" required maxLength="2000" /></label>
-      <ErrorMessage>{error}</ErrorMessage>
-      <SuccessMessage>{success}</SuccessMessage>
-      <button className="button button-dark" type="submit" disabled={saving}>{saving ? "Sending…" : "Send claim"}</button>
-    </form>
+    <>
+      <form className="claim-form" onSubmit={submitClaim}>
+        <div className="form-section-heading">
+          <div><b>Send a claim for {item.title}</b><span>Your claim is reviewed privately by campus staff.</span></div>
+          <button className="icon-button" type="button" onClick={onClose} aria-label="Close claim form">×</button>
+        </div>
+        <label>Your name<input name="claimantName" required maxLength="100" /></label>
+        <label>Email address<input name="claimantEmail" type="email" required maxLength="254" /></label>
+        <label>How can you identify this item?<textarea name="message" rows="3" required maxLength="2000" /></label>
+        <ErrorMessage>{error}</ErrorMessage>
+        <SuccessMessage>{success}</SuccessMessage>
+        <button className="button button-dark" type="submit" disabled={saving}>{saving ? "Sending…" : "Send claim"}</button>
+      </form>
+      <SuccessToast message={toastMessage} onClose={setToastMessage} />
+    </>
   );
 }
 
@@ -289,6 +326,7 @@ function ReportPage() {
   const [type, setType] = useState(() => searchParams.get("type") === "found" ? "found" : "lost");
   const [error, setError] = useState("");
   const [created, setCreated] = useState(null);
+  const [toastMessage, setToastMessage] = useState("");
   const [backupToken, setBackupToken] = useState("");
   const [matches, setMatches] = useState([]);
   const [matchError, setMatchError] = useState("");
@@ -319,6 +357,7 @@ function ReportPage() {
         }),
       });
       setCreated(item);
+      setToastMessage("Your report was recorded successfully.");
       formElement.reset();
       try {
         const managed = JSON.parse(localStorage.getItem(managedItemsKey) || "{}");
@@ -396,60 +435,23 @@ function ReportPage() {
           <Link className="text-link" to="/manage">Manage your reports <ArrowIcon /></Link>
         </section>
       ) : null}
+      <SuccessToast message={toastMessage} onClose={setToastMessage} />
     </main>
   );
 }
 
 function ManagedReport({ report, onChange }) {
   const { item, claims } = report;
-  const [error, setError] = useState("");
-  const [busy, setBusy] = useState(false);
-
-  async function updateStatus(status) {
-    setBusy(true);
-    setError("");
-    try {
-      const result = await apiRequest(`/manage/${item.id}/status`, {
-        method: "PATCH",
-        headers: { "X-Management-Token": report.managementToken },
-        body: JSON.stringify({ status }),
-      });
-      onChange({ ...report, item: result.item });
-    } catch (requestError) {
-      setError(requestError.message);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function updateClaim(claimId, status) {
-    setBusy(true);
-    setError("");
-    try {
-      await apiRequest(`/manage/${item.id}/claims/${claimId}`, {
-        method: "PATCH",
-        headers: { "X-Management-Token": report.managementToken },
-        body: JSON.stringify({ status }),
-      });
-      onChange({ ...report, claims: claims.map((claim) => claim.id === claimId ? { ...claim, status } : claim) });
-    } catch (requestError) {
-      setError(requestError.message);
-    } finally {
-      setBusy(false);
-    }
-  }
 
   return (
     <article className="managed-card">
       <div className="managed-heading">
         <div>
           <span className={`item-type ${item.type}`}>{item.type}</span>
-          <h2>{item.title}</h2><p>{item.category} · {item.location} · {item.status}</p>
+          <h2>{item.title}</h2><p>{item.category} · {item.location} · {itemStatusLabels[item.status] || item.status}</p>
         </div>
-        <button className="button button-light" type="button" disabled={busy} onClick={() => updateStatus(item.status === "open" ? "resolved" : "open")}>
-          Mark {item.status === "open" ? "resolved" : "open"}
-        </button>
       </div>
+      {item.storage_location ? <p className="private-contact">Stored at: {item.storage_location}</p> : null}
       <p className="private-contact">Your contact: <a href={`mailto:${item.contact_email}`}>{item.contact_email}</a></p>
       <h3>Claims ({claims.length})</h3>
       {!claims.length ? <p className="empty-inline">No claims yet.</p> : null}
@@ -461,16 +463,9 @@ function ManagedReport({ report, onChange }) {
               <a href={`mailto:${claim.claimant_email}`}>{claim.claimant_email}</a>
               <p>{claim.message}</p>
             </div>
-            {claim.status === "pending" ? (
-              <div className="claim-actions">
-                <button className="button button-light" type="button" disabled={busy} onClick={() => updateClaim(claim.id, "declined")}>Decline</button>
-                <button className="button button-dark" type="button" disabled={busy} onClick={() => updateClaim(claim.id, "accepted")}>Accept</button>
-              </div>
-            ) : null}
           </div>
         ))}
       </div>
-      <ErrorMessage>{error}</ErrorMessage>
     </article>
   );
 }
@@ -507,13 +502,9 @@ function ManagePage() {
     return () => { active = false; };
   }, []);
 
-  function updateReport(updated) {
-    setReports((current) => current.map((report) => report.item.id === updated.item.id ? updated : report));
-  }
-
   return (
     <main className="feature-page page-width">
-      <PageIntro label="Manage reports" description="Review claims, contact claimants, and update report status.">Your reports</PageIntro>
+      <PageIntro label="Manage reports" description="View reports and claims. Campus staff handle verification, claim decisions, and item status.">Your reports</PageIntro>
       <p className="privacy-note">Reports are available in the browser where they were created. Keep this device secure.</p>
       <ErrorMessage>{error}</ErrorMessage>
       {loading ? <p className="empty-state">Loading your reports…</p> : null}
@@ -524,7 +515,223 @@ function ManagePage() {
         </div>
       ) : null}
       <div className="managed-list">
-        {reports.map((report) => <ManagedReport key={report.item.id} report={report} onChange={updateReport} />)}
+        {reports.map((report) => <ManagedReport key={report.item.id} report={report} />)}
+      </div>
+    </main>
+  );
+}
+
+function staffRequest(path, token, options = {}) {
+  return apiRequest(path, {
+    ...options,
+    headers: { ...options.headers, Authorization: `Bearer ${token}` },
+  });
+}
+
+function StaffLoginPage() {
+  const navigate = useNavigate();
+  const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  async function submitLogin(event) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    setError("");
+    setSaving(true);
+    try {
+      const { token } = await apiRequest("/staff/auth/login", {
+        method: "POST",
+        body: JSON.stringify({ username: form.get("username"), password: form.get("password") }),
+      });
+      sessionStorage.setItem(staffTokenKey, token);
+      navigate("/staff", { replace: true });
+    } catch (requestError) {
+      setError(requestError.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <main className="feature-page page-width">
+      <PageIntro label="Campus staff" description="Sign in to receive, verify, and manage found items and claims.">
+        Staff login
+      </PageIntro>
+      <form className="feature-form staff-login-form" onSubmit={submitLogin}>
+        <label>Username or email<input name="username" required autoComplete="username" maxLength="254" /></label>
+        <label>Password<input name="password" type="password" required autoComplete="current-password" maxLength="256" /></label>
+        <ErrorMessage>{error}</ErrorMessage>
+        <button className="button button-dark" type="submit" disabled={saving}>{saving ? "Signing in…" : "Sign in"}</button>
+      </form>
+    </main>
+  );
+}
+
+function StaffItemCard({ item, busy, onAction }) {
+  const [storageLocation, setStorageLocation] = useState(item.storage_location || "");
+  const pendingClaims = item.claims.filter((claim) => claim.status === "pending");
+
+  return (
+    <article className="managed-card staff-item-card">
+      <div className="managed-heading">
+        <div>
+          <span className={`item-type ${item.type}`}>{item.type}</span>
+          <span className={`status-badge ${item.status}`}>{itemStatusLabels[item.status] || item.status}</span>
+          <h2>{item.title}</h2>
+          <p>{item.category} · {item.location} · {new Date(item.event_date).toLocaleDateString()}</p>
+        </div>
+      </div>
+      <p>{item.description}</p>
+      <p className="private-contact">Reporter: {item.contact_name} · <a href={`mailto:${item.contact_email}`}>{item.contact_email}</a></p>
+      {item.storage_location ? <p className="private-contact">Storage: {item.storage_location}</p> : null}
+      {item.status === "with_finder" && item.type === "found" ? (
+        <form className="staff-action-row" onSubmit={(event) => {
+          event.preventDefault();
+          onAction(item.id, "receive", { storageLocation });
+        }}>
+          <label>Storage location<input value={storageLocation} onChange={(event) => setStorageLocation(event.target.value)} required maxLength="160" placeholder="Office, cabinet, or room" /></label>
+          <button className="button button-dark" type="submit" disabled={busy}>Receive item</button>
+        </form>
+      ) : null}
+      {item.status === "received_by_staff" ? (
+        <button className="button button-dark" type="button" disabled={busy} onClick={() => onAction(item.id, "verify")}>Verify item details</button>
+      ) : null}
+      {(item.status === "verified" || item.status === "awaiting_claim_review") && pendingClaims.length ? (
+        <div className="staff-action-row">
+          <p>Verify claim details before approving. Approval enables pickup.</p>
+        </div>
+      ) : null}
+      {item.status === "approved_for_pickup" ? (
+        <button className="button button-dark" type="button" disabled={busy} onClick={() => onAction(item.id, "resolve")}>Mark returned / resolved</button>
+      ) : null}
+      {item.status === "resolved" ? (
+        <button className="button button-light" type="button" disabled={busy} onClick={() => onAction(item.id, "reopen")}>Reopen case</button>
+      ) : null}
+      <h3>Claims ({item.claims.length})</h3>
+      {!item.claims.length ? <p className="empty-inline">No claims yet.</p> : null}
+      <div className="claim-list">
+        {item.claims.map((claim) => (
+          <div className="claim-card" key={claim.id}>
+            <div className="claim-details">
+              <b>{claim.claimant_name}<span className={`claim-status ${claim.status}`}>{claim.status}</span></b>
+              <a href={`mailto:${claim.claimant_email}`}>{claim.claimant_email}</a>
+              <p>{claim.message}</p>
+            </div>
+            {claim.status === "pending" && (
+              ["verified", "awaiting_claim_review"].includes(item.status) ||
+              (item.type === "lost" && item.status === "lost_reported")
+            ) ? (
+              <div className="claim-actions">
+                <button className="button button-light" type="button" disabled={busy} onClick={() => onAction(item.id, "claim", { claimId: claim.id, status: "declined" })}>Reject</button>
+                {item.type === "found" ? (
+                  <button className="button button-dark" type="button" disabled={busy} onClick={() => onAction(item.id, "claim", { claimId: claim.id, status: "approved" })}>Approve for pickup</button>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
+        ))}
+      </div>
+    </article>
+  );
+}
+
+function StaffDashboardPage() {
+  const navigate = useNavigate();
+  const [token, setToken] = useState(() => sessionStorage.getItem(staffTokenKey) || "");
+  const [username, setUsername] = useState("");
+  const [status, setStatus] = useState("active");
+  const [items, setItems] = useState([]);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [busyItem, setBusyItem] = useState(null);
+
+  useEffect(() => {
+    let active = true;
+    async function loadDashboard() {
+      if (!token) {
+        navigate("/staff/login", { replace: true });
+        return;
+      }
+      try {
+        const session = await staffRequest("/staff/auth/session", token);
+        const result = await staffRequest(`/staff/items?status=${encodeURIComponent(status)}`, token);
+        if (active) {
+          setUsername(session.username);
+          setItems(result.items);
+          setError("");
+        }
+      } catch (requestError) {
+        if (active) {
+          setError(requestError.message);
+          if (requestError.message === "Staff login required.") {
+            sessionStorage.removeItem(staffTokenKey);
+            navigate("/staff/login", { replace: true });
+          }
+        }
+      } finally {
+        if (active) setLoading(false);
+      }
+    }
+    setLoading(true);
+    loadDashboard();
+    return () => { active = false; };
+  }, [token, status, navigate]);
+
+  async function performAction(itemId, action, body = {}) {
+    setBusyItem(itemId);
+    setError("");
+    const endpoint = action === "claim"
+      ? `/staff/items/${itemId}/claims/${body.claimId}`
+      : `/staff/items/${itemId}/${action}`;
+    try {
+      await staffRequest(endpoint, token, {
+        method: "PATCH",
+        ...(action === "receive" || action === "claim" ? { body: JSON.stringify(action === "receive" ? body : { status: body.status }) } : {}),
+      });
+      const result = await staffRequest(`/staff/items?status=${encodeURIComponent(status)}`, token);
+      setItems(result.items);
+    } catch (requestError) {
+      setError(requestError.message);
+    } finally {
+      setBusyItem(null);
+    }
+  }
+
+  async function logout() {
+    try {
+      await staffRequest("/staff/auth/logout", token, { method: "POST" });
+    } catch (requestError) {
+      setError(requestError.message);
+    } finally {
+      sessionStorage.removeItem(staffTokenKey);
+      setToken("");
+      navigate("/staff/login", { replace: true });
+    }
+  }
+
+  return (
+    <main className="feature-page page-width">
+      <PageIntro label="Staff operations" description="Receive found items, verify details, and review claims before approving pickup.">
+        Staff dashboard
+      </PageIntro>
+      <div className="staff-dashboard-toolbar">
+        <span>Signed in as {username || "staff"}</span>
+        <label>Filter by status
+          <select value={status} onChange={(event) => setStatus(event.target.value)}>
+            <option value="active">All active</option>
+            {Object.entries(itemStatusLabels).map(([value, label]) => <option value={value} key={value}>{label}</option>)}
+            <option value="all">All reports</option>
+          </select>
+        </label>
+        <button className="button button-light" type="button" onClick={logout}>Sign out</button>
+      </div>
+      <ErrorMessage>{error}</ErrorMessage>
+      {loading ? <p className="empty-state">Loading reports…</p> : null}
+      {!loading && !items.length ? <div className="empty-state"><b>No reports in this view.</b></div> : null}
+      <div className="managed-list">
+        {items.map((item) => (
+          <StaffItemCard key={item.id} item={item} busy={busyItem === item.id} onAction={performAction} />
+        ))}
       </div>
     </main>
   );
@@ -552,6 +759,8 @@ export default function App() {
         <Route path="/browse" element={<BrowsePage />} />
         <Route path="/report" element={<ReportPage />} />
         <Route path="/manage" element={<ManagePage />} />
+        <Route path="/staff/login" element={<StaffLoginPage />} />
+        <Route path="/staff" element={<StaffDashboardPage />} />
         <Route path="*" element={<NotFoundPage />} />
       </Routes>
       <Footer />

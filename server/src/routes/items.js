@@ -49,7 +49,7 @@ router.get("/", asyncHandler(async (req, res) => {
   if (q !== undefined && (typeof q !== "string" || q.length > 100)) throw invalid("Search must be at most 100 characters.");
   if (category !== undefined && (typeof category !== "string" || category.length > 60)) throw invalid("Category must be at most 60 characters.");
 
-  const conditions = ["status = 'open'"];
+  const conditions = ["status <> 'resolved'"];
   const values = [];
   if (type) {
     conditions.push("type = ?");
@@ -89,9 +89,12 @@ router.post("/", asyncHandler(async (req, res) => {
   const tokenHash = crypto.createHash("sha256").update(managementToken).digest("hex");
   const [result] = await pool.execute(
     `INSERT INTO items
-      (type, title, description, category, location, event_date, contact_name, contact_email, management_token_hash)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [body.type, title, description, category, location, body.eventDate, contactName, contactEmail, tokenHash],
+      (type, title, description, category, location, event_date, contact_name, contact_email, management_token_hash, status)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      body.type, title, description, category, location, body.eventDate, contactName, contactEmail,
+      tokenHash, body.type === "found" ? "with_finder" : "lost_reported",
+    ],
   );
   const [items] = await pool.execute(`SELECT ${publicFields} FROM items WHERE id = ?`, [result.insertId]);
   res.status(201).json({ item: items[0], managementToken });
@@ -101,13 +104,15 @@ router.get("/:id/matches", asyncHandler(async (req, res) => {
   const id = parseId(req.params.id);
   if (!id) throw invalid("Item ID is invalid.");
   const [items] = await pool.execute(
-    `SELECT ${publicFields} FROM items WHERE id = ? AND status = 'open'`,
+    `SELECT ${publicFields} FROM items WHERE id = ? AND status NOT IN ('approved_for_pickup', 'resolved')`,
     [id],
   );
   if (!items.length) return res.status(404).json({ error: "Item not found." });
 
   const [candidates] = await pool.execute(
-    `SELECT ${publicFields} FROM items WHERE type <> ? AND status = 'open' AND id <> ? ORDER BY created_at DESC LIMIT 300`,
+    `SELECT ${publicFields} FROM items
+     WHERE type <> ? AND status NOT IN ('approved_for_pickup', 'resolved') AND id <> ?
+     ORDER BY created_at DESC LIMIT 300`,
     [items[0].type, id],
   );
   const matches = candidates
@@ -127,15 +132,42 @@ router.post("/:id/claims", asyncHandler(async (req, res) => {
   const message = requiredText(body.message, "Message", 2000);
   if (!emailPattern.test(claimantEmail)) throw invalid("Enter a valid email address.");
 
-  const [items] = await pool.execute("SELECT id FROM items WHERE id = ? AND status = 'open'", [id]);
-  if (!items.length) return res.status(404).json({ error: "Open item not found." });
-
   try {
-    const [result] = await pool.execute(
-      "INSERT INTO claims (item_id, claimant_name, claimant_email, message) VALUES (?, ?, ?, ?)",
-      [id, claimantName, claimantEmail, message],
-    );
-    res.status(201).json({ claim: { id: result.insertId, status: "pending" } });
+    const claimId = await (async () => {
+      const connection = await pool.getConnection();
+      try {
+        await connection.beginTransaction();
+        const [items] = await connection.execute(
+          "SELECT id, type, status FROM items WHERE id = ? AND status NOT IN ('approved_for_pickup', 'resolved') FOR UPDATE",
+          [id],
+        );
+        if (!items.length) {
+          const error = new Error("Open item not found.");
+          error.status = 404;
+          throw error;
+        }
+        if (items[0].type !== "found") {
+          const error = new Error("Claims are submitted on found-item reports. If you found this item, report it as found.");
+          error.status = 400;
+          throw error;
+        }
+        const [result] = await connection.execute(
+          "INSERT INTO claims (item_id, claimant_name, claimant_email, message) VALUES (?, ?, ?, ?)",
+          [id, claimantName, claimantEmail, message],
+        );
+        if (items[0].status === "verified") {
+          await connection.execute("UPDATE items SET status = 'awaiting_claim_review' WHERE id = ?", [id]);
+        }
+        await connection.commit();
+        return result.insertId;
+      } catch (error) {
+        await connection.rollback();
+        throw error;
+      } finally {
+        connection.release();
+      }
+    })();
+    res.status(201).json({ claim: { id: claimId, status: "pending" } });
   } catch (error) {
     if (error.code === "ER_DUP_ENTRY") {
       return res.status(409).json({ error: "A claim from this email is already on this item." });

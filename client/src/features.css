@@ -189,6 +189,11 @@
 }
 .item-type.lost { background: #e8eaf2; color: #343a46; }
 .item-category { color: var(--muted); font-size: 12px; }
+.status-badge { display: inline-flex; width: fit-content; margin-bottom: 10px; padding: 5px 9px; border-radius: 20px; background: #e8eaf2; color: #343a46; font-size: 11px; font-weight: 800; }
+.status-badge.with_finder { background: #fff0c2; color: #6a4b00; }
+.status-badge.received_by_staff, .status-badge.verified, .status-badge.awaiting_claim_review { background: #dcecff; color: var(--blue-900); }
+.status-badge.approved_for_pickup { background: #e5f2e7; color: #245c36; }
+.status-badge.resolved { background: #e8eaf2; color: #545b66; }
 .item-card h2, .managed-card h2 { margin: 0 0 9px; color: var(--ink); font: 800 19px Manrope, sans-serif; letter-spacing: -.5px; }
 .item-description { min-height: 42px; margin-bottom: 15px; color: #4f5c53; font-size: 14px; line-height: 1.6; overflow-wrap: anywhere; }
 .item-meta { display: flex; justify-content: space-between; gap: 8px; padding-top: 12px; border-top: 1px solid var(--line); color: var(--muted); font-size: 12px; }
@@ -217,6 +222,30 @@
 .form-message { margin: 12px 0; font-size: 13px; line-height: 1.5; }
 .error-message { color: #9b3028; }
 .success-message { color: #356b48; }
+.success-toast {
+  position: fixed;
+  z-index: 20;
+  right: 16px;
+  bottom: max(16px, env(safe-area-inset-bottom));
+  left: 16px;
+  width: fit-content;
+  max-width: 520px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-inline: auto;
+  padding: 14px 16px;
+  border: 1px solid #b7d8c0;
+  border-radius: 14px;
+  background: #f0f8f2;
+  color: #245c36;
+  box-shadow: 0 8px 28px rgb(25 55 35 / 20%);
+  font-size: 14px;
+  font-weight: 700;
+}
+.success-toast-icon { display: grid; width: 26px; height: 26px; flex: 0 0 26px; place-items: center; border-radius: 50%; background: #d7eddd; }
+.success-toast-close { width: 32px; height: 32px; flex: 0 0 32px; margin: -4px -6px -4px auto; border: 0; border-radius: 50%; background: transparent; color: inherit; font-size: 22px; }
+.success-toast-close:hover { background: rgb(36 92 54 / 10%); }
 
 .result-panel { margin-top: 18px; }
 .result-panel h2 { margin: 14px 0; color: var(--ink); font: 800 20px Manrope, sans-serif; }
@@ -254,9 +283,18 @@
 .claim-details > a { width: fit-content; font-size: 12px; }
 .claim-details p { margin: 2px 0 0; color: #4f5c53; font-size: 13px; line-height: 1.6; }
 .claim-status { margin-left: 7px; padding: 4px 7px; border-radius: 12px; background: #e9eee9; color: #4d594f; font-size: 10px; font-weight: 700; text-transform: capitalize; }
-.claim-status.accepted { background: #e5f2e7; color: #245c36; }
+.claim-status.approved { background: #e5f2e7; color: #245c36; }
 .claim-status.declined { background: #f4dddd; color: #8c1d18; }
 .claim-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.staff-login-form { display: grid; gap: 16px; }
+.staff-login-form > .button { width: 100%; }
+.staff-dashboard-toolbar { display: flex; flex-direction: column; align-items: stretch; gap: 12px; padding: 14px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); color: var(--muted); font-size: 13px; }
+.staff-dashboard-toolbar label, .staff-action-row label { display: grid; gap: 7px; color: var(--ink); font-size: 13px; font-weight: 700; }
+.staff-dashboard-toolbar select, .staff-action-row input { min-height: 46px; padding: 10px 12px; border: 1px solid var(--outline); border-radius: 8px; background: rgb(253 251 255 / 76%); color: var(--ink); font-size: 16px; }
+.staff-action-row { display: flex; flex-direction: column; align-items: stretch; gap: 10px; margin: 12px 0; }
+.staff-action-row p { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.5; }
+.staff-item-card > .button { width: 100%; }
+.staff-item-card > .managed-heading .status-badge { margin: 0 0 0 8px; vertical-align: middle; }
 
 .report-type-picker { min-width: 0; margin: 0; padding: 0; border: 0; }
 .report-type-picker legend { margin-bottom: 8px; color: var(--ink); font-size: 13px; font-weight: 700; }
@@ -291,6 +329,12 @@
   .feature-form, .result-panel { padding: 24px; }
   .managed-heading { flex-direction: row; align-items: center; justify-content: space-between; }
   .managed-heading .button { width: auto; }
+  .staff-login-form > .button { width: auto; justify-self: start; min-width: 220px; }
+  .staff-dashboard-toolbar { flex-direction: row; align-items: center; justify-content: space-between; }
+  .staff-dashboard-toolbar label { min-width: 220px; }
+  .staff-dashboard-toolbar > .button { min-height: 44px; }
+  .staff-action-row { flex-direction: row; align-items: flex-end; }
+  .staff-action-row label { flex: 1; }
   .claim-card { flex-direction: row; align-items: center; justify-content: space-between; }
   .claim-actions { display: flex; }
   .claim-actions .button { min-width: 100px; }
