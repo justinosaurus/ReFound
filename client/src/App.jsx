@@ -148,6 +148,23 @@ function SuccessMessage({ children }) {
   return children ? <p className="form-message success-message" role="status">{children}</p> : null;
 }
 
+function SuccessToast({ message, onClose }) {
+  useEffect(() => {
+    if (!message) return undefined;
+    const timeout = window.setTimeout(() => onClose(""), 6000);
+    return () => window.clearTimeout(timeout);
+  }, [message, onClose]);
+
+  if (!message) return null;
+  return (
+    <div className="success-toast" role="status" aria-live="polite">
+      <span className="success-toast-icon" aria-hidden="true">✓</span>
+      <span>{message}</span>
+      <button className="success-toast-close" type="button" onClick={() => onClose("")} aria-label="Dismiss notification">×</button>
+    </div>
+  );
+}
+
 function ItemCard({ item, onClaim }) {
   return (
     <article className="item-card">
@@ -176,6 +193,7 @@ function ItemCard({ item, onClaim }) {
 function ClaimForm({ item, onClose }) {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const [toastMessage, setToastMessage] = useState("");
   const [saving, setSaving] = useState(false);
 
   async function submitClaim(event) {
@@ -195,6 +213,7 @@ function ClaimForm({ item, onClose }) {
         }),
       });
       setSuccess("Your claim was sent privately to campus staff for review.");
+      setToastMessage("Your claim was recorded successfully.");
       formElement.reset();
     } catch (requestError) {
       setError(requestError.message);
@@ -204,18 +223,21 @@ function ClaimForm({ item, onClose }) {
   }
 
   return (
-    <form className="claim-form" onSubmit={submitClaim}>
-      <div className="form-section-heading">
-        <div><b>Send a claim for {item.title}</b><span>Your claim is reviewed privately by campus staff.</span></div>
-        <button className="icon-button" type="button" onClick={onClose} aria-label="Close claim form">×</button>
-      </div>
-      <label>Your name<input name="claimantName" required maxLength="100" /></label>
-      <label>Email address<input name="claimantEmail" type="email" required maxLength="254" /></label>
-      <label>How can you identify this item?<textarea name="message" rows="3" required maxLength="2000" /></label>
-      <ErrorMessage>{error}</ErrorMessage>
-      <SuccessMessage>{success}</SuccessMessage>
-      <button className="button button-dark" type="submit" disabled={saving}>{saving ? "Sending…" : "Send claim"}</button>
-    </form>
+    <>
+      <form className="claim-form" onSubmit={submitClaim}>
+        <div className="form-section-heading">
+          <div><b>Send a claim for {item.title}</b><span>Your claim is reviewed privately by campus staff.</span></div>
+          <button className="icon-button" type="button" onClick={onClose} aria-label="Close claim form">×</button>
+        </div>
+        <label>Your name<input name="claimantName" required maxLength="100" /></label>
+        <label>Email address<input name="claimantEmail" type="email" required maxLength="254" /></label>
+        <label>How can you identify this item?<textarea name="message" rows="3" required maxLength="2000" /></label>
+        <ErrorMessage>{error}</ErrorMessage>
+        <SuccessMessage>{success}</SuccessMessage>
+        <button className="button button-dark" type="submit" disabled={saving}>{saving ? "Sending…" : "Send claim"}</button>
+      </form>
+      <SuccessToast message={toastMessage} onClose={setToastMessage} />
+    </>
   );
 }
 
@@ -304,6 +326,7 @@ function ReportPage() {
   const [type, setType] = useState(() => searchParams.get("type") === "found" ? "found" : "lost");
   const [error, setError] = useState("");
   const [created, setCreated] = useState(null);
+  const [toastMessage, setToastMessage] = useState("");
   const [backupToken, setBackupToken] = useState("");
   const [matches, setMatches] = useState([]);
   const [matchError, setMatchError] = useState("");
@@ -334,6 +357,7 @@ function ReportPage() {
         }),
       });
       setCreated(item);
+      setToastMessage("Your report was recorded successfully.");
       formElement.reset();
       try {
         const managed = JSON.parse(localStorage.getItem(managedItemsKey) || "{}");
@@ -411,6 +435,7 @@ function ReportPage() {
           <Link className="text-link" to="/manage">Manage your reports <ArrowIcon /></Link>
         </section>
       ) : null}
+      <SuccessToast message={toastMessage} onClose={setToastMessage} />
     </main>
   );
 }
