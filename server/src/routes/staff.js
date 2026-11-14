@@ -74,7 +74,7 @@ router.get("/items", asyncHandler(async (req, res) => {
   }
 
   const [items] = await pool.execute(
-    `SELECT id, type, title, description, category, location, event_date, status,
+    `SELECT id, type, title, description, category, location, event_date, status, photo_url,
             storage_location, contact_name, contact_email, created_at
      FROM items ${conditions.length ? `WHERE ${conditions.join(" AND ")}` : ""}
      ORDER BY created_at DESC LIMIT 300`,

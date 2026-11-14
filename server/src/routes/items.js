@@ -1,11 +1,41 @@
 const crypto = require("node:crypto");
 const express = require("express");
+const fs = require("node:fs/promises");
+const path = require("node:path");
+const multer = require("multer");
 const pool = require("../config/db");
 const { scoreMatch } = require("../lib/matching");
 
 const router = express.Router();
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const publicFields = "id, type, title, description, category, location, event_date, status, created_at";
+const publicFields = "id, type, title, description, category, location, event_date, status, photo_url, created_at";
+const uploadsDirectory = path.join(__dirname, "..", "..", "uploads");
+const photoExtensions = {
+  "image/jpeg": ".jpg",
+  "image/png": ".png",
+  "image/webp": ".webp",
+};
+
+const photoUpload = multer({
+  storage: multer.diskStorage({
+    destination(req, _file, callback) {
+      fs.mkdir(uploadsDirectory, { recursive: true }).then(
+        () => callback(null, uploadsDirectory),
+        callback,
+      );
+    },
+    filename(_req, file, callback) {
+      callback(null, `${crypto.randomBytes(16).toString("hex")}${photoExtensions[file.mimetype]}`);
+    },
+  }),
+  limits: { fileSize: 5 * 1024 * 1024, files: 1, fields: 8, parts: 9, fieldSize: 4000 },
+  fileFilter(_req, file, callback) {
+    if (!photoExtensions[file.mimetype]) {
+      return callback(invalid("Choose a JPG, PNG, or WebP photo."));
+    }
+    callback(null, true);
+  },
+});
 
 function asyncHandler(handler) {
   return (req, res, next) => Promise.resolve(handler(req, res, next)).catch(next);
@@ -43,6 +73,19 @@ function validDate(value) {
   return !Number.isNaN(date.valueOf()) && date.toISOString().slice(0, 10) === value;
 }
 
+async function validPhoto(file) {
+  const header = await fs.readFile(file.path);
+  if (file.mimetype === "image/jpeg") {
+    return header[0] === 0xff && header[1] === 0xd8 && header[2] === 0xff;
+  }
+  if (file.mimetype === "image/png") {
+    return header.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+  }
+  return file.mimetype === "image/webp" &&
+    header.toString("ascii", 0, 4) === "RIFF" &&
+    header.toString("ascii", 8, 12) === "WEBP";
+}
+
 router.get("/", asyncHandler(async (req, res) => {
   const { type, q, category } = req.query;
   if (type && !["lost", "found"].includes(type)) throw invalid("Type must be lost or found.");
@@ -72,32 +115,41 @@ router.get("/", asyncHandler(async (req, res) => {
   res.json({ items });
 }));
 
-router.post("/", asyncHandler(async (req, res) => {
-  const body = bodyObject(req);
-  if (!["lost", "found"].includes(body.type)) throw invalid("Type must be lost or found.");
+router.post("/", photoUpload.single("photo"), asyncHandler(async (req, res) => {
+  let itemCreated = false;
+  try {
+    const body = bodyObject(req);
+    if (!["lost", "found"].includes(body.type)) throw invalid("Type must be lost or found.");
 
-  const title = requiredText(body.title, "Title", 120);
-  const description = requiredText(body.description, "Description", 2000);
-  const category = requiredText(body.category, "Category", 60);
-  const location = requiredText(body.location, "Location", 160);
-  const contactName = requiredText(body.contactName, "Contact name", 100);
-  const contactEmail = requiredText(body.contactEmail, "Contact email", 254).toLowerCase();
-  if (!emailPattern.test(contactEmail)) throw invalid("Enter a valid contact email address.");
-  if (!validDate(body.eventDate)) throw invalid("Enter a valid item date.");
+    const title = requiredText(body.title, "Title", 120);
+    const description = requiredText(body.description, "Description", 2000);
+    const category = requiredText(body.category, "Category", 60);
+    const location = requiredText(body.location, "Location", 160);
+    const contactName = requiredText(body.contactName, "Contact name", 100);
+    const contactEmail = requiredText(body.contactEmail, "Contact email", 254).toLowerCase();
+    if (!emailPattern.test(contactEmail)) throw invalid("Enter a valid contact email address.");
+    if (!validDate(body.eventDate)) throw invalid("Enter a valid item date.");
+    if (req.file && !(await validPhoto(req.file))) throw invalid("The selected file is not a valid JPG, PNG, or WebP image.");
 
-  const managementToken = crypto.randomBytes(32).toString("base64url");
-  const tokenHash = crypto.createHash("sha256").update(managementToken).digest("hex");
-  const [result] = await pool.execute(
-    `INSERT INTO items
-      (type, title, description, category, location, event_date, contact_name, contact_email, management_token_hash, status)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [
-      body.type, title, description, category, location, body.eventDate, contactName, contactEmail,
-      tokenHash, body.type === "found" ? "with_finder" : "lost_reported",
-    ],
-  );
-  const [items] = await pool.execute(`SELECT ${publicFields} FROM items WHERE id = ?`, [result.insertId]);
-  res.status(201).json({ item: items[0], managementToken });
+    const managementToken = crypto.randomBytes(32).toString("base64url");
+    const tokenHash = crypto.createHash("sha256").update(managementToken).digest("hex");
+    const photoUrl = req.file ? `/uploads/${path.basename(req.file.filename)}` : null;
+    const [result] = await pool.execute(
+      `INSERT INTO items
+        (type, title, description, category, location, event_date, contact_name, contact_email, photo_url, management_token_hash, status)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        body.type, title, description, category, location, body.eventDate, contactName, contactEmail,
+        photoUrl, tokenHash, body.type === "found" ? "with_finder" : "lost_reported",
+      ],
+    );
+    itemCreated = true;
+    const [items] = await pool.execute(`SELECT ${publicFields} FROM items WHERE id = ?`, [result.insertId]);
+    res.status(201).json({ item: items[0], managementToken });
+  } catch (error) {
+    if (req.file && !itemCreated) await fs.rm(req.file.path, { force: true });
+    throw error;
+  }
 }));
 
 router.get("/:id/matches", asyncHandler(async (req, res) => {

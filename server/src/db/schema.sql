@@ -8,6 +8,7 @@ CREATE TABLE IF NOT EXISTS items (
   event_date DATE NOT NULL,
   contact_name VARCHAR(100) NOT NULL,
   contact_email VARCHAR(254) NOT NULL,
+  photo_url VARCHAR(255) NULL,
   management_token_hash CHAR(64) NOT NULL,
   status ENUM(
     'lost_reported',

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, NavLink, Route, Routes, useNavigate, useSearchParams } from "react-router-dom";
 
 import "./features.css";
@@ -7,6 +7,8 @@ const apiUrl = (import.meta.env.VITE_API_URL || "http://localhost:5000/api").rep
 const managedItemsKey = "refound-managed-items";
 const staffTokenKey = "refound-staff-token";
 const categories = ["Accessories", "Bags", "Clothing", "Electronics", "Keys", "Other"];
+const maxPhotoSize = 5 * 1024 * 1024;
+const photoTypes = ["image/jpeg", "image/png", "image/webp"];
 const itemStatusLabels = {
   lost_reported: "Lost report",
   with_finder: "With finder",
@@ -26,7 +28,7 @@ async function apiRequest(path, options = {}) {
   const response = await fetch(`${apiUrl}${path}`, {
     ...options,
     headers: {
-      ...(options.body ? { "Content-Type": "application/json" } : {}),
+      ...(options.body && !(options.body instanceof FormData) ? { "Content-Type": "application/json" } : {}),
       ...options.headers,
     },
   });
@@ -38,6 +40,17 @@ async function apiRequest(path, options = {}) {
   }
   if (!response.ok) throw new Error(payload.error || "The request could not be completed.");
   return payload;
+}
+
+function itemPhotoUrl(photoUrl) {
+  if (!photoUrl) return "";
+  const apiRoot = apiUrl.replace(/\/api\/?$/, "") || window.location.origin;
+  return new URL(photoUrl, apiRoot).href;
+}
+
+function ItemPhoto({ item }) {
+  if (!item.photo_url) return null;
+  return <img className="item-photo" src={itemPhotoUrl(item.photo_url)} alt={`Photo of ${item.title}`} loading="lazy" />;
 }
 
 function ArrowIcon() {
@@ -140,8 +153,8 @@ function PageIntro({ label, description, children }) {
   );
 }
 
-function ErrorMessage({ children }) {
-  return children ? <p className="form-message error-message" role="alert">{children}</p> : null;
+function ErrorMessage({ children, className = "", id }) {
+  return children ? <p id={id} className={`form-message error-message ${className}`} role="alert">{children}</p> : null;
 }
 
 function SuccessMessage({ children }) {
@@ -173,6 +186,7 @@ function ItemCard({ item, onClaim }) {
         <span className="item-category">{item.category}</span>
       </div>
       <span className={`status-badge ${item.status}`}>{itemStatusLabels[item.status] || item.status}</span>
+      <ItemPhoto item={item} />
       <h2>{item.title}</h2>
       <p className="item-description">{item.description}</p>
       <div className="item-meta">
@@ -324,6 +338,9 @@ function MatchResults({ matches, error }) {
 function ReportPage() {
   const [searchParams] = useSearchParams();
   const [type, setType] = useState(() => searchParams.get("type") === "found" ? "found" : "lost");
+  const [photo, setPhoto] = useState(null);
+  const [photoPreview, setPhotoPreview] = useState("");
+  const [photoError, setPhotoError] = useState("");
   const [error, setError] = useState("");
   const [created, setCreated] = useState(null);
   const [toastMessage, setToastMessage] = useState("");
@@ -331,11 +348,52 @@ function ReportPage() {
   const [matches, setMatches] = useState([]);
   const [matchError, setMatchError] = useState("");
   const [saving, setSaving] = useState(false);
+  const photoInput = useRef(null);
+
+  useEffect(() => {
+    if (!photo) {
+      setPhotoPreview("");
+      return undefined;
+    }
+    const previewUrl = URL.createObjectURL(photo);
+    setPhotoPreview(previewUrl);
+    return () => URL.revokeObjectURL(previewUrl);
+  }, [photo]);
+
+  function choosePhoto(event) {
+    const selected = event.target.files?.[0];
+    setPhotoError("");
+    if (!selected) {
+      setPhoto(null);
+      return;
+    }
+    if (!photoTypes.includes(selected.type)) {
+      setPhotoError("Choose a JPG, PNG, or WebP image.");
+      event.target.value = "";
+      setPhoto(null);
+      return;
+    }
+    if (selected.size > maxPhotoSize) {
+      setPhotoError("This photo is larger than 5 MB. Choose a smaller image.");
+      event.target.value = "";
+      setPhoto(null);
+      return;
+    }
+    setPhoto(selected);
+  }
+
+  function removePhoto() {
+    setPhoto(null);
+    setPhotoError("");
+    if (photoInput.current) photoInput.current.value = "";
+  }
 
   async function submitReport(event) {
     event.preventDefault();
     const formElement = event.currentTarget;
     const form = new FormData(formElement);
+    if (!photo) form.delete("photo");
+    form.set("type", type);
     setError("");
     setCreated(null);
     setBackupToken("");
@@ -345,20 +403,13 @@ function ReportPage() {
     try {
       const { item, managementToken } = await apiRequest("/items", {
         method: "POST",
-        body: JSON.stringify({
-          type,
-          title: form.get("title"),
-          description: form.get("description"),
-          category: form.get("category"),
-          location: form.get("location"),
-          eventDate: form.get("eventDate"),
-          contactName: form.get("contactName"),
-          contactEmail: form.get("contactEmail"),
-        }),
+        body: form,
       });
       setCreated(item);
       setToastMessage("Your report was recorded successfully.");
       formElement.reset();
+      setPhoto(null);
+      setPhotoError("");
       try {
         const managed = JSON.parse(localStorage.getItem(managedItemsKey) || "{}");
         managed[item.id] = managementToken;
@@ -417,6 +468,19 @@ function ReportPage() {
           </label>
           <label className="form-wide">Item name<input name="title" required maxLength="120" placeholder="e.g. Blue water bottle" /></label>
           <label className="form-wide">Description<textarea name="description" rows="4" required maxLength="2000" placeholder="Details that could identify the item" /></label>
+          <label className="form-wide photo-upload">
+            <span id="photo-upload-label">Add a photo <span className="optional-label">(optional)</span></span>
+            <span className="photo-upload-help" id="photo-upload-help">A clear photo helps others recognize the item. JPG, PNG, or WebP · up to 5 MB.</span>
+            <input ref={photoInput} name="photo" type="file" accept="image/jpeg,image/png,image/webp" aria-labelledby="photo-upload-label" aria-describedby={`photo-upload-help${photoError ? " photo-error" : ""}`} aria-invalid={Boolean(photoError)} onChange={choosePhoto} />
+          </label>
+          {photo ? (
+            <div className="form-wide photo-preview">
+              <img src={photoPreview} alt={`Preview of ${photo.name}`} />
+              <div><b>{photo.name}</b><span>{(photo.size / 1024 / 1024).toFixed(1)} MB</span></div>
+              <button className="button button-light" type="button" onClick={removePhoto}>Remove photo</button>
+            </div>
+          ) : null}
+          <ErrorMessage id="photo-error" className="form-wide">{photoError}</ErrorMessage>
           <label>Location<input name="location" required maxLength="160" placeholder="Place or nearby landmark" /></label>
           <label>Date<input name="eventDate" type="date" required max={todayDate()} defaultValue={todayDate()} /></label>
           <label>Your name<input name="contactName" required maxLength="100" /></label>
@@ -452,6 +516,7 @@ function ManagedReport({ report, onChange }) {
         </div>
       </div>
       {item.storage_location ? <p className="private-contact">Stored at: {item.storage_location}</p> : null}
+      <ItemPhoto item={item} />
       <p className="private-contact">Your contact: <a href={`mailto:${item.contact_email}`}>{item.contact_email}</a></p>
       <h3>Claims ({claims.length})</h3>
       {!claims.length ? <p className="empty-inline">No claims yet.</p> : null}
@@ -582,6 +647,7 @@ function StaffItemCard({ item, busy, onAction }) {
         </div>
       </div>
       <p>{item.description}</p>
+      <ItemPhoto item={item} />
       <p className="private-contact">Reporter: {item.contact_name} · <a href={`mailto:${item.contact_email}`}>{item.contact_email}</a></p>
       {item.storage_location ? <p className="private-contact">Storage: {item.storage_location}</p> : null}
       {item.status === "with_finder" && item.type === "found" ? (

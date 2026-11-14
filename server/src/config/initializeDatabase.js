@@ -21,6 +21,9 @@ async function initializeDatabase() {
   if (!itemColumnNames.has("storage_location")) {
     await pool.query("ALTER TABLE items ADD COLUMN storage_location VARCHAR(160) NULL");
   }
+  if (!itemColumnNames.has("photo_url")) {
+    await pool.query("ALTER TABLE items ADD COLUMN photo_url VARCHAR(255) NULL");
+  }
   if (!itemColumnNames.has("status_before_resolved")) {
     await pool.query(
       `ALTER TABLE items ADD COLUMN status_before_resolved ENUM(

@@ -38,7 +38,7 @@ Vite prints the frontend address, usually `http://localhost:5173`. The API runs 
 
 ## Features
 
-- Create lost or found reports with private contact details.
+- Create lost or found reports with private contact details and an optional JPG, PNG, or WebP photo (up to 5 MB).
 - Browse and search open items by type and keywords.
 - View up to five possible opposite-type matches based on category, location, and description.
 - Send a private claim with contact details and identifying information.
@@ -53,7 +53,7 @@ There is no email delivery. A random management key is created when a report is 
 
 - `GET /api/health` — API process health; does not test MySQL.
 - `GET /api/items` — list open items; optional `type=lost|found`, `q=search`, and `category`.
-- `POST /api/items` — create a report; returns the public item and one-time management key.
+- `POST /api/items` — create a report as JSON or multipart form data, optionally including one `photo` file (JPG, PNG, or WebP, up to 5 MB); returns the public item and one-time management key.
 - `GET /api/items/:id/matches` — return possible opposite-type matches.
 - `POST /api/items/:id/claims` — submit a claim for an active report, including a found item still with its finder.
 - `GET /api/manage/:id` — get a managed item and its claims; requires `X-Management-Token`.

@@ -18,7 +18,7 @@ async function findManagedItem(id, token) {
   if (typeof token !== "string" || token.length !== 43) return null;
   const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
   const [items] = await pool.execute(
-    `SELECT id, type, title, description, category, location, event_date, status, storage_location,
+    `SELECT id, type, title, description, category, location, event_date, status, storage_location, photo_url,
             contact_name, contact_email, created_at
      FROM items WHERE id = ? AND management_token_hash = ?`,
     [id, tokenHash],
