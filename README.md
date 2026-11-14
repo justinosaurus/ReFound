@@ -1,6 +1,16 @@
-# ReFound
+## Campus Lost and Found Management System
 
-ReFound is a mobile-first lost-and-found app built with React, Express, and MySQL. Users can post lost or found items, browse and search open reports, view possible matches, and send private claims to reporters.
+**Group Members:**
+- Rayandayan, Justine R.
+- Jereza, Robert S.
+- Sarabi, Aldemhar Khan F.
+- Macaumbos Jr, Sadjid E.
+- Arique, Enrico Nillo V.
+
+
+## ReFound
+
+ReFound is a mobile-first lost-and-found app built with React, Express, and MySQL. Users can post lost or found items, browse and search open reports.
 
 ## Requirements
 
