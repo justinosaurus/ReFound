@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+﻿import { useEffect, useRef, useState } from "react";
 import { Link, NavLink, Route, Routes, useNavigate, useSearchParams } from "react-router-dom";
 
 import "./features.css";
@@ -6,6 +6,7 @@ import "./features.css";
 const apiUrl = (import.meta.env.VITE_API_URL || "http://localhost:5000/api").replace(/\/$/, "");
 const managedItemsKey = "refound-managed-items";
 const staffTokenKey = "refound-staff-token";
+const themeStorageKey = "refound-theme";
 const categories = ["Accessories", "Bags", "Clothing", "Electronics", "Keys", "Other"];
 const maxPhotoSize = 5 * 1024 * 1024;
 const photoTypes = ["image/jpeg", "image/png", "image/webp"];
@@ -18,6 +19,32 @@ const itemStatusLabels = {
   approved_for_pickup: "Approved for pickup",
   resolved: "Resolved",
 };
+
+function getInitialTheme() {
+  if (typeof window === "undefined") return "light";
+  const saved = localStorage.getItem(themeStorageKey);
+  if (saved === "light" || saved === "dark") return saved;
+  return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+}
+
+function useTheme() {
+  const [theme, setTheme] = useState(getInitialTheme);
+
+  useEffect(() => {
+    document.documentElement.setAttribute("data-theme", theme);
+    try {
+      localStorage.setItem(themeStorageKey, theme);
+    } catch {
+      // Ignore storage failures; theme still applies for this session.
+    }
+  }, [theme]);
+
+  function toggleTheme() {
+    setTheme((current) => (current === "dark" ? "light" : "dark"));
+  }
+
+  return { theme, toggleTheme };
+}
 
 function todayDate() {
   const date = new Date();
@@ -57,12 +84,12 @@ function ArrowIcon() {
   return <span aria-hidden="true" className="arrow">→</span>;
 }
 
-function Header() {
+function Header({ theme, onToggleTheme }) {
   return (
     <header className="site-header">
       <div className="nav-wrap">
         <Link className="brand" to="/" aria-label="ReFound home">
-          <span className="brand-mark">r<span>.</span></span>
+          <span className="brand-mark" aria-hidden="true">r<span>.</span></span>
           <span>ReFound</span>
         </Link>
         <nav className="main-nav" aria-label="Main navigation">
@@ -70,7 +97,18 @@ function Header() {
           <NavLink to="/report">Report</NavLink>
           <NavLink to="/manage">My reports</NavLink>
         </nav>
-        <Link className="nav-cta" to="/report?type=lost">Report an item <ArrowIcon /></Link>
+        <div className="header-actions">
+          <button
+            className="theme-toggle"
+            type="button"
+            onClick={onToggleTheme}
+            aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+            title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+          >
+            {theme === "dark" ? "Light mode" : "Dark mode"}
+          </button>
+          <Link className="nav-cta" to="/report?type=lost">Report an item <ArrowIcon /></Link>
+        </div>
       </div>
     </header>
   );
@@ -124,7 +162,7 @@ function HomePage() {
           </div>
           <Link className="feed-view-all" to="/browse">View all <ArrowIcon /></Link>
         </div>
-        {loading ? <p className="feed-state">Loading recent reports…</p> : null}
+        {loading ? <p className="feed-state">Loading recent reports...</p> : null}
         <ErrorMessage>{error}</ErrorMessage>
         {!loading && !error && !items.length ? (
           <div className="feed-empty">
@@ -210,6 +248,14 @@ function ClaimForm({ item, onClose }) {
   const [toastMessage, setToastMessage] = useState("");
   const [saving, setSaving] = useState(false);
 
+  useEffect(() => {
+    function handleKeyDown(event) {
+      if (event.key === "Escape") onClose();
+    }
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [onClose]);
+
   async function submitClaim(event) {
     event.preventDefault();
     const formElement = event.currentTarget;
@@ -236,20 +282,32 @@ function ClaimForm({ item, onClose }) {
     }
   }
 
+  const titleId = `claim-title-${item.id}`;
+
   return (
     <>
-      <form className="claim-form" onSubmit={submitClaim}>
-        <div className="form-section-heading">
-          <div><b>Send a claim for {item.title}</b><span>Your claim is reviewed privately by campus staff.</span></div>
-          <button className="icon-button" type="button" onClick={onClose} aria-label="Close claim form">×</button>
+      <div className="claim-dialog-backdrop" onClick={onClose}>
+        <div
+          className="claim-dialog"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby={titleId}
+          onClick={(event) => event.stopPropagation()}
+        >
+          <form className="claim-form" onSubmit={submitClaim}>
+            <div className="form-section-heading">
+              <div><b id={titleId}>Send a claim for {item.title}</b><span>Your claim is reviewed privately by campus staff.</span></div>
+              <button className="icon-button" type="button" onClick={onClose} aria-label="Close claim form">×</button>
+            </div>
+            <label>Your name<input name="claimantName" required maxLength="100" /></label>
+            <label>Email address<input name="claimantEmail" type="email" required maxLength="254" /></label>
+            <label>How can you identify this item?<textarea name="message" rows="3" required maxLength="2000" /></label>
+            <ErrorMessage>{error}</ErrorMessage>
+            <SuccessMessage>{success}</SuccessMessage>
+            <button className="button button-dark" type="submit" disabled={saving}>{saving ? "Sending..." : "Send claim"}</button>
+          </form>
         </div>
-        <label>Your name<input name="claimantName" required maxLength="100" /></label>
-        <label>Email address<input name="claimantEmail" type="email" required maxLength="254" /></label>
-        <label>How can you identify this item?<textarea name="message" rows="3" required maxLength="2000" /></label>
-        <ErrorMessage>{error}</ErrorMessage>
-        <SuccessMessage>{success}</SuccessMessage>
-        <button className="button button-dark" type="submit" disabled={saving}>{saving ? "Sending…" : "Send claim"}</button>
-      </form>
+      </div>
       <SuccessToast message={toastMessage} onClose={setToastMessage} />
     </>
   );
@@ -304,7 +362,7 @@ function BrowsePage() {
         <button className="button button-dark" type="submit">Search</button>
       </form>
       <ErrorMessage>{error}</ErrorMessage>
-      {loading ? <p className="empty-state">Loading reports…</p> : null}
+      {loading ? <p className="empty-state">Loading reports...</p> : null}
       {!loading && !error && !items.length ? (
         <div className="empty-state">
           <b>No open reports found.</b><span>Try another search or post an item.</span>
@@ -590,7 +648,7 @@ function ReportPage() {
         </div>
         <p className="privacy-note">Contact details are private and shared only with people who send a claim.</p>
         <ErrorMessage>{error}</ErrorMessage>
-        <button className="button button-dark" type="submit" disabled={saving}>{saving ? "Publishing…" : "Publish report"} <ArrowIcon /></button>
+        <button className="button button-dark" type="submit" disabled={saving}>{saving ? "Publishing..." : "Publish report"} <ArrowIcon /></button>
       </form>
       {created ? (
         <section className="result-panel" aria-live="polite">
@@ -674,7 +732,7 @@ function ManagePage() {
       <PageIntro label="Manage reports" description="View reports and claims. Campus staff handle verification, claim decisions, and item status.">Your reports</PageIntro>
       <p className="privacy-note">Reports are available in the browser where they were created. Keep this device secure.</p>
       <ErrorMessage>{error}</ErrorMessage>
-      {loading ? <p className="empty-state">Loading your reports…</p> : null}
+      {loading ? <p className="empty-state">Loading your reports...</p> : null}
       {!loading && !reports.length ? (
         <div className="empty-state">
           <b>No saved reports in this browser.</b><span>Publish a report here to manage claims and status.</span>
@@ -728,7 +786,7 @@ function StaffLoginPage() {
         <label>Username or email<input name="username" required autoComplete="username" maxLength="254" /></label>
         <label>Password<input name="password" type="password" required autoComplete="current-password" maxLength="256" /></label>
         <ErrorMessage>{error}</ErrorMessage>
-        <button className="button button-dark" type="submit" disabled={saving}>{saving ? "Signing in…" : "Sign in"}</button>
+        <button className="button button-dark" type="submit" disabled={saving}>{saving ? "Signing in..." : "Sign in"}</button>
       </form>
     </main>
   );
@@ -894,7 +952,7 @@ function StaffDashboardPage() {
         <button className="button button-light" type="button" onClick={logout}>Sign out</button>
       </div>
       <ErrorMessage>{error}</ErrorMessage>
-      {loading ? <p className="empty-state">Loading reports…</p> : null}
+      {loading ? <p className="empty-state">Loading reports...</p> : null}
       {!loading && !items.length ? <div className="empty-state"><b>No reports in this view.</b></div> : null}
       <div className="managed-list">
         {items.map((item) => (
@@ -919,9 +977,11 @@ function NotFoundPage() {
 }
 
 export default function App() {
+  const { theme, toggleTheme } = useTheme();
+
   return (
-    <>
-      <Header />
+    <div className="app-shell">
+      <Header theme={theme} onToggleTheme={toggleTheme} />
       <Routes>
         <Route path="/" element={<HomePage />} />
         <Route path="/browse" element={<BrowsePage />} />
@@ -932,6 +992,7 @@ export default function App() {
         <Route path="*" element={<NotFoundPage />} />
       </Routes>
       <Footer />
-    </>
+    </div>
   );
 }
+
