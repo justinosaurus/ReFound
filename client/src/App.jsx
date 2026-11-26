@@ -3,7 +3,7 @@ import { Link, NavLink, Route, Routes, useNavigate, useSearchParams } from "reac
 
 import "./features.css";
 
-const apiUrl = (import.meta.env.VITE_API_URL || "/api").replace(/\/$/, "");
+const apiUrl = (import.meta.env.VITE_API_URL || "http://localhost:5000/api").replace(/\/$/, "");
 const managedItemsKey = "refound-managed-items";
 const staffTokenKey = "refound-staff-token";
 const categories = ["Accessories", "Bags", "Clothing", "Electronics", "Keys", "Other"];
@@ -905,6 +905,43 @@ function StaffDashboardPage() {
   );
 }
 
+function ScrollButtons() {
+  const [canUp, setCanUp] = useState(false);
+  const [canDown, setCanDown] = useState(false);
+
+  useEffect(() => {
+    function update() {
+      const { scrollY, innerHeight } = window;
+      const max = document.documentElement.scrollHeight - innerHeight;
+      setCanUp(scrollY > 120);
+      setCanDown(max > 120 && scrollY < max - 120);
+    }
+    update();
+    window.addEventListener("scroll", update, { passive: true });
+    window.addEventListener("resize", update);
+    const observer = new ResizeObserver(update);
+    observer.observe(document.body);
+    return () => {
+      window.removeEventListener("scroll", update);
+      window.removeEventListener("resize", update);
+      observer.disconnect();
+    };
+  }, []);
+
+  const scrollTo = (top) => window.scrollTo({ top, behavior: "smooth" });
+
+  return (
+    <div className="scroll-buttons" aria-label="Page scroll controls">
+      <button className="scroll-button" type="button" disabled={!canUp} onClick={() => scrollTo(0)} aria-label="Scroll to top">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m6 15 6-6 6 6" /></svg>
+      </button>
+      <button className="scroll-button" type="button" disabled={!canDown} onClick={() => scrollTo(document.documentElement.scrollHeight)} aria-label="Scroll to bottom">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg>
+      </button>
+    </div>
+  );
+}
+
 function Footer() {
   return <footer className="site-footer"><div className="page-width footer-inner"><Link className="brand" to="/"><span className="brand-mark">r<span>.</span></span><span>ReFound</span></Link><span>Lost and found reports</span></div></footer>;
 }
@@ -932,6 +969,7 @@ export default function App() {
         <Route path="*" element={<NotFoundPage />} />
       </Routes>
       <Footer />
+      <ScrollButtons />
     </>
   );
 }
